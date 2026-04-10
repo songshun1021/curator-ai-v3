@@ -1,4 +1,6 @@
-﻿import { createFile, fileExists, readFile, upsertFile } from "@/lib/file-system";
+import { dispatchJobCreated } from "@/lib/action-events";
+import { createFile, fileExists, readFile, upsertFile } from "@/lib/file-system";
+import { getInterviewJobFolderPath, getInterviewRoundFolderPath, normalizeRoundName } from "@/lib/interview-paths";
 import { useAppStore } from "@/store/app-store";
 
 function formatMMDD(date = new Date()) {
@@ -15,6 +17,22 @@ async function findAvailableJobFolderName(baseName: string) {
     index += 1;
   }
   return name;
+}
+
+async function ensureInterviewFolder(path: string, parentPath: string) {
+  if (await fileExists(path)) return;
+  const name = path.split("/").filter(Boolean).at(-1) ?? "";
+  await createFile({
+    path,
+    name,
+    type: "folder",
+    contentType: "none",
+    content: "",
+    isSystem: false,
+    isGenerated: false,
+    parentPath,
+    metadata: "{}",
+  });
 }
 
 export async function createJobFolderWithJD(args: { company: string; position: string; jdText: string; resumePath?: string }) {
@@ -84,6 +102,7 @@ export async function createJobFolderWithJD(args: { company: string; position: s
   const store = useAppStore.getState();
   await store.reloadTree();
   await store.openFilePath(`${folderPath}/jd.md`);
+  dispatchJobCreated({ jobFolderPath: folderPath });
   return { folderPath, folderName };
 }
 
@@ -143,8 +162,10 @@ export async function createJobFolder(company: string, position: string, resumeP
     metadata: "{}",
   });
 
-  await useAppStore.getState().reloadTree();
-  useAppStore.getState().setCurrentFilePath(`${folderPath}/jd.md`);
+  const store = useAppStore.getState();
+  await store.reloadTree();
+  store.setCurrentFilePath(`${folderPath}/jd.md`);
+  dispatchJobCreated({ jobFolderPath: folderPath });
 }
 
 export async function createInterviewRecord(jobFolderPath: string, round: string) {
@@ -152,29 +173,18 @@ export async function createInterviewRecord(jobFolderPath: string, round: string
   if (!metaRaw) throw new Error("岗位 meta.json 不存在");
   const meta = JSON.parse(metaRaw.content) as { id: string; company: string; position: string };
 
-  const safeRound = round.trim() || "一面";
-  const folderName = `${meta.company}-${meta.position}-${safeRound}`;
-  const folderPath = `/面试复盘/${folderName}`;
-  const transcriptPath = `${folderPath}/面试原文.md`;
+  const safeRound = normalizeRoundName(round);
+  const interviewJobPath = getInterviewJobFolderPath(meta.company, meta.position);
+  const roundFolderPath = getInterviewRoundFolderPath(meta.company, meta.position, safeRound);
+  const transcriptPath = `${roundFolderPath}/面试原文.md`;
 
-  if (!(await fileExists(folderPath))) {
-    await createFile({
-      path: folderPath,
-      name: folderName,
-      type: "folder",
-      contentType: "none",
-      content: "",
-      isSystem: false,
-      isGenerated: false,
-      parentPath: "/面试复盘",
-      metadata: "{}",
-    });
-  }
+  await ensureInterviewFolder(interviewJobPath, "/面试复盘");
+  await ensureInterviewFolder(roundFolderPath, interviewJobPath);
 
   await upsertFile({
-    path: `${folderPath}/meta.json`,
+    path: `${roundFolderPath}/meta.json`,
     name: "meta.json",
-    parentPath: folderPath,
+    parentPath: roundFolderPath,
     contentType: "json",
     content: JSON.stringify(
       {
@@ -196,7 +206,7 @@ export async function createInterviewRecord(jobFolderPath: string, round: string
     await upsertFile({
       path: transcriptPath,
       name: "面试原文.md",
-      parentPath: folderPath,
+      parentPath: roundFolderPath,
       contentType: "md",
       content: "# 面试原文\n\n> 请将面试听写文本粘贴到下方（尽量按问答格式整理）\n\n",
     });

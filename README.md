@@ -6,43 +6,95 @@
 2. 基于 JD + 简历生成求职沟通文书
 3. 面试准备包与复盘闭环
 
-## 本地一键启动（推荐新手）
+## 我是用户（启动使用）
 
-### Windows 双击版
-- 双击运行 `start-curator.bat`
+### Windows
+- 双击 `start-curator.bat`
+- 或运行 `start-curator.ps1`
 
-### PowerShell 版
-- 右键用 PowerShell 运行：`start-curator.ps1`
+### macOS / Linux
+```bash
+chmod +x start-curator.sh
+./start-curator.sh
+```
 
-脚本会自动：
+启动脚本会自动：
 - 检查 Node.js 与 pnpm
-- 安装依赖（首次）
+- 首次安装依赖
 - 启动 `pnpm dev`
 - 打开浏览器到 `http://localhost:3000`
 
-## 手动启动
+## 我是开发者（Windows 发布）
 
-```bash
-pnpm install
-pnpm dev
+> 发布与打包仅在 Windows 开发环境执行。
+
+### 一键发布 GitHub
+- 双击 `publish-curator.bat`
+- 或运行：
+```powershell
+.\publish-curator.ps1
 ```
+
+可选提交信息：
+```powershell
+.\publish-curator.ps1 -Message "feat: 本轮功能迭代"
+```
+
+发布脚本会执行：
+1. 检查 `git/node/pnpm` 与 git 身份
+2. `pnpm build`
+3. 敏感文件检查
+4. `git add/commit/pull --rebase/push`
+
+## 我要分享给朋友（微信）
+
+### 生成分享包（Windows）
+- 双击 `package-wechat.bat`
+- 或运行：
+```powershell
+.\package-wechat.ps1
+```
+
+### 产物
+- `release/curator-ai-v3-wechat-YYYYMMDD-HHmm.zip`
+
+### 分享包包含
+- 运行必需源码与配置（`src/`、`public/`、配置文件）
+- 双平台启动入口：
+  - `start-curator.bat`
+  - `start-curator.ps1`
+  - `start-curator.sh`
+- `README-微信快速开始.md`
+
+### 分享包不包含
+- `.git`、`node_modules`、`.next`、`.env*`
+- 发布/打包脚本（避免普通用户误操作）
 
 ## 首次使用建议
 
-1. 进入 `AI配置/模型配置.json` 填写模型配置并“验证连接”。
-2. 点击左侧 `+ 新建岗位`，录入公司、岗位、JD。
-3. 在岗位目录中生成“定制简历/匹配分析/面试准备包”。
-4. 面试后可在岗位工具栏点“新建复盘”，录入原文后生成复盘报告。
+1. 进入 `AI配置/模型配置.json` 填写模型配置并验证连接。
+2. 按右侧「新手使用指引」5 步走通：
+   简历 -> 岗位/JD -> 准备包 -> 面试原文 -> 复盘报告。
 
 ## 常见问题
 
-### 打开页面空白
-- 请确认 Node.js 版本 >= 18
-- 请确认本机 3000 端口未被占用
+### 启动失败：找不到 Node
+- 安装 Node.js 18+：<https://nodejs.org/>
 
-### 验证模型失败
-- 检查 API Key 是否正确
-- 检查 Base URL 与模型名是否匹配
+### `pnpm build` 出现 EPERM（开发者）
+- 关闭所有 `pnpm dev` / Node 终端
+- 删除 `.next` 后重试
+- 避免管理员/普通权限混用
+
+### 模型生成失败
+- 检查 API Key、Base URL、模型名是否匹配
+
+## 项目基线文档（先读）
+
+- `Curator-AI-v3-产品规划.md`
+- `Curator-AI-v3-开发执行手册.md`
+- `SESSION_COMPACT.md`
+- `AI开发复盘.md`
 
 ## 开源说明
 

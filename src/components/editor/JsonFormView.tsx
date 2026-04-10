@@ -1,13 +1,15 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readFile, upsertFile } from "@/lib/file-system";
+import { deleteFile, readFile, upsertFile } from "@/lib/file-system";
 import { registerResumeDraftController } from "@/lib/resume-draft-sync";
 import { LlmConfig, ResumeData } from "@/types";
 import { useAppStore } from "@/store/app-store";
 import { sendMessage } from "@/lib/ai-engine";
+import { dispatchResumeSaved } from "@/lib/action-events";
 import { SYSTEM_FILE_PATHS } from "@/lib/system-files";
 import { createJobFolderWithJD } from "@/lib/workspace-actions";
+import { extractTextFromPdfFile, isLikelyPdfFile } from "@/lib/pdf-import";
 
 const providerCatalog: Array<{
   key: string;
@@ -205,6 +207,16 @@ function chipsFromInput(text: string): string[] {
     .filter(Boolean);
 }
 
+function isResumeDataEmpty(data: ResumeData) {
+  const profile = data.profile ?? { name: "", phone: "", email: "", wechat: "", targetRole: "" };
+  const hasProfile = Boolean(profile.name?.trim() || profile.phone?.trim() || profile.email?.trim() || profile.wechat?.trim() || profile.targetRole?.trim());
+  const hasEducation = (data.education?.length ?? 0) > 0;
+  const hasInternships = (data.internships?.length ?? 0) > 0;
+  const hasProjects = (data.projects?.length ?? 0) > 0;
+  const hasCampus = (data.campusExperience?.length ?? 0) > 0;
+  return !(hasProfile || hasEducation || hasInternships || hasProjects || hasCampus);
+}
+
 function formatSavedAt(timestamp: string | null) {
   if (!timestamp) return "";
   const date = new Date(timestamp);
@@ -331,6 +343,8 @@ function ChipEditor({
 export function JsonFormView({ path }: { path: string }) {
   const setLlmConfig = useAppStore((s) => s.setLlmConfig);
   const openFilePath = useAppStore((s) => s.openFilePath);
+  const llmConfig = useAppStore((s) => s.llmConfig);
+  const fileCache = useAppStore((s) => s.fileCache);
   const [raw, setRaw] = useState("{}");
   const [resume, setResume] = useState<ResumeData>(emptyResume);
   const [isDirty, setIsDirty] = useState(false);
@@ -357,15 +371,36 @@ export function JsonFormView({ path }: { path: string }) {
   const [customResumeViewMode, setCustomResumeViewMode] = useState<JsonViewMode>(() =>
     getInitialJsonMode(CUSTOM_RESUME_VIEW_MODE_KEY),
   );
+  const [resumeImporting, setResumeImporting] = useState(false);
+  const [resumeImportMessage, setResumeImportMessage] = useState<{
+    type: "success" | "warning" | "error";
+    stage: "saved" | "extract_warn" | "struct_warn" | "done";
+    text: string;
+  } | null>(null);
+  const [resumeImportStep, setResumeImportStep] = useState<string | null>(null);
+  const [resumeImportProgress, setResumeImportProgress] = useState<1 | 2 | 3>(1);
+  const [showEmptyResumeForm, setShowEmptyResumeForm] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeRef = useRef<ResumeData>(emptyResume);
   const hydratedRef = useRef(false);
+  const resumePdfInputRef = useRef<HTMLInputElement | null>(null);
 
   const isModelConfig = path.endsWith("模型配置.json");
   const isResume = path.endsWith("主简历.json");
   const isJobCreateConfig = path === "/岗位/_新建岗位.json";
   const isCustomResumeJson = path.startsWith("/简历/定制简历/") && path.endsWith(".json");
+  const isResumeEmpty = useMemo(() => isResumeDataEmpty(resume), [resume]);
+  const resumeSourceStatus = useMemo<"ready" | "pdf-fallback-json" | "pdf-only" | "json-only" | "missing">(() => {
+    const hasImportedPdf = Boolean(fileCache["/简历/个人简历.pdf"]?.content.trim());
+    const hasImportedExtract = Boolean(fileCache["/简历/个人简历.提取.md"]?.content.trim());
+    const hasMainResume = Boolean(fileCache["/简历/主简历.json"]?.content.trim());
+    if (hasImportedExtract) return "ready";
+    if (hasImportedPdf && hasMainResume) return "pdf-fallback-json";
+    if (hasImportedPdf) return "pdf-only";
+    if (hasMainResume) return "json-only";
+    return "missing";
+  }, [fileCache]);
 
   const selectedProvider = useMemo(
     () => providerCatalog.find((item) => item.key === modelConfig.provider),
@@ -402,6 +437,14 @@ export function JsonFormView({ path }: { path: string }) {
     setJobCreateDirty(false);
     setJobCreateLastSavedAt(null);
     setJobCreateMessage(null);
+    setResumeImporting(false);
+    setResumeImportMessage(null);
+    setResumeImportStep(null);
+    setResumeImportProgress(1);
+    setShowEmptyResumeForm(false);
+    if (resumePdfInputRef.current) {
+      resumePdfInputRef.current.value = "";
+    }
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -569,6 +612,192 @@ export function JsonFormView({ path }: { path: string }) {
     }
   }
 
+  function unwrapJsonEnvelope(text: string) {
+    const trimmed = text.trim();
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    if (fenced) return fenced[1] ?? "";
+    const quoted = trimmed.match(/^'''(?:json)?\s*([\s\S]*?)\s*'''$/i);
+    if (quoted) return quoted[1] ?? "";
+    return trimmed;
+  }
+
+  async function fileToDataUrl(file: File) {
+    const buffer = await file.arrayBuffer();
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const slice = bytes.subarray(offset, offset + chunkSize);
+      binary += String.fromCharCode(...Array.from(slice));
+    }
+    const base64 = btoa(binary);
+    return `data:application/pdf;base64,${base64}`;
+  }
+
+  async function importResumeFromPdf(file: File) {
+    if (!isResume) return;
+
+    setResumeImporting(true);
+    setResumeImportMessage(null);
+    setResumeImportProgress(1);
+    setResumeImportStep("正在保存 PDF 文件...");
+    try {
+      const isPdf = await isLikelyPdfFile(file);
+      if (!isPdf) {
+        setResumeImportMessage({
+          type: "error",
+          stage: "done",
+          text: "导入失败：请选择 .pdf 文件。",
+        });
+        return;
+      }
+
+      const existingPdf = fileCache["/简历/个人简历.pdf"];
+      if (existingPdf) {
+        const shouldOverwrite = window.confirm("已存在个人简历 PDF，确认覆盖并替换提取文本吗？");
+        if (!shouldOverwrite) return;
+      }
+
+      const pdfDataUrl = await fileToDataUrl(file);
+      await upsertFile({
+        path: "/简历/个人简历.pdf",
+        name: "个人简历.pdf",
+        parentPath: "/简历",
+        contentType: "pdf",
+        content: pdfDataUrl,
+      });
+      await useAppStore.getState().reloadTree();
+      setResumeImportMessage({
+        type: "success",
+        stage: "saved",
+        text: "导入成功：PDF 已保存到 /简历/个人简历.pdf。",
+      });
+
+      let resumeText = "";
+      let extractQuality: "ok" | "low" = "ok";
+      try {
+        setResumeImportProgress(2);
+        setResumeImportStep("正在提取 PDF 文本...");
+        const extractResult = await extractTextFromPdfFile(file);
+        resumeText = extractResult.text;
+        extractQuality = extractResult.quality;
+        await upsertFile({
+          path: "/简历/个人简历.提取.md",
+          name: "个人简历.提取.md",
+          parentPath: "/简历",
+          contentType: "md",
+          content: resumeText,
+        });
+        await useAppStore.getState().reloadTree();
+      } catch (extractError) {
+        setShowEmptyResumeForm(true);
+        setResumeImportMessage({
+          type: "warning",
+          stage: "extract_warn",
+          text: `导入成功：PDF 已保存；未检测到可复制文字（${extractError instanceof Error ? extractError.message : "未知原因"}），当前回退使用主简历 JSON。`,
+        });
+        return;
+      }
+
+      if (!llmConfig.model || !llmConfig.baseURL || !llmConfig.apiKey) {
+        setShowEmptyResumeForm(true);
+        setResumeImportMessage({
+          type: "warning",
+          stage: "struct_warn",
+          text: "导入成功：PDF 与提取文本已保存。未配置模型，已跳过自动结构化，你可继续手动编辑主简历 JSON。",
+        });
+        return;
+      }
+
+      try {
+        setResumeImportProgress(3);
+        setResumeImportStep("AI 正在结构化简历...");
+        const result = await sendMessage({
+          model: llmConfig.model,
+          baseURL: llmConfig.baseURL,
+          apiKey: llmConfig.apiKey,
+          messages: [
+            {
+              role: "system",
+              content:
+                "你是简历结构化助手。你必须仅输出一个合法 JSON 对象，禁止输出任何解释文字、标题、前后缀、Markdown 代码块。",
+            },
+            {
+              role: "user",
+              content: `请将以下简历文本结构化为 ResumeData JSON。字段必须包含：id、profile{name,phone,email,wechat,targetRole}、education[]、internships[]、campusExperience[]、projects[]、skills{professional,languages,certificates,tools}。缺失字段填空字符串或空数组。\n\n简历文本如下：\n${resumeText}`,
+            },
+          ],
+        });
+
+        const cleaned = unwrapJsonEnvelope(result);
+        const parsed = JSON.parse(cleaned);
+        const normalized = normalizeResume(parsed);
+        saveResumeToState(normalized);
+        setShowEmptyResumeForm(true);
+        await useAppStore.getState().reloadTree();
+        setResumeImportMessage({
+          type: "success",
+          stage: "done",
+          text:
+            extractQuality === "low"
+              ? "导入成功：PDF 与提取文本已保存（提取质量较低），主简历已更新到编辑态，请检查后保存。"
+              : "导入成功：PDF 与提取文本已保存，主简历已更新到编辑态，请点击“立即保存”。",
+        });
+      } catch (structError) {
+        setShowEmptyResumeForm(true);
+        setResumeImportMessage({
+          type: "warning",
+          stage: "struct_warn",
+          text: `导入成功：PDF 与提取文本已保存；自动结构化未完成（${structError instanceof Error ? structError.message : "未知原因"}），请手动编辑主简历 JSON。`,
+        });
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "当前版本仅支持文本型 PDF（非扫描件）。";
+      const retryHint = reason.includes("PDF 解析组件加载失败") ? " 请刷新页面后重试，若仍失败请重启应用后再试。" : "";
+      setResumeImportMessage({
+        type: "error",
+        stage: "done",
+        text: `导入失败：${reason}${retryHint}`,
+      });
+    } finally {
+      setResumeImporting(false);
+      setResumeImportStep(null);
+      if (resumePdfInputRef.current) {
+        resumePdfInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function removeImportedResumePdf() {
+    if (!isResume) return;
+    const hasPdf = Boolean(fileCache["/简历/个人简历.pdf"]);
+    const hasExtract = Boolean(fileCache["/简历/个人简历.提取.md"]);
+    if (!hasPdf && !hasExtract) {
+      setResumeImportMessage({ type: "error", stage: "done", text: "当前没有可删除的个人简历 PDF。" });
+      return;
+    }
+
+    const ok = window.confirm("确认删除个人简历 PDF 与提取文本吗？此操作不会删除主简历 JSON。");
+    if (!ok) return;
+
+    try {
+      await deleteFile("/简历/个人简历.pdf");
+      await deleteFile("/简历/个人简历.提取.md");
+      await useAppStore.getState().reloadTree();
+      setResumeImportMessage({
+        type: "success",
+        stage: "done",
+        text: "已删除个人简历 PDF 与提取文本，当前将回退使用主简历 JSON。",
+      });
+    } catch (error) {
+      setResumeImportMessage({
+        type: "error",
+        stage: "done",
+        text: `删除失败：${error instanceof Error ? error.message : "请重试"}`,
+      });
+    }
+  }
+
   const saveRaw = useCallback(
     async (next: string) => {
       setRaw(next);
@@ -608,16 +837,18 @@ export function JsonFormView({ path }: { path: string }) {
       setSaveStatus("saving");
       try {
         await saveRaw(content);
+        await useAppStore.getState().refreshCurrentFile();
         setResume(target);
         resumeRef.current = target;
         setIsDirty(false);
         setSaveStatus("saved");
         setLastSavedAt(new Date().toISOString());
+        dispatchResumeSaved({ path });
       } catch {
         setSaveStatus("error");
       }
     },
-    [draftTextByField, isResume, saveRaw],
+    [draftTextByField, isResume, path, saveRaw],
   );
 
   const persistGenericJson = useCallback(async () => {
@@ -893,7 +1124,10 @@ export function JsonFormView({ path }: { path: string }) {
           </div>
             <div className="rounded-md border p-3">
               <p className="text-sm font-medium">高级：编辑系统提示词</p>
-              <p className="mt-1 text-xs text-zinc-500">系统文件默认隐藏。你可以从这里进入各模块 prompt/agent 进行优化。</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                系统文件默认隐藏。你可以从这里进入各模块 prompt/agent 进行优化。
+                文书/报告请仅输出 Markdown 正文（禁止 ``` 或 &#39;&#39;&#39; 包裹）；结构化资产仅输出合法 JSON。
+              </p>
               <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" className="rounded-md border px-3 py-1 text-xs" onClick={() => void openSystemPrompt(SYSTEM_FILE_PATHS.global.prompt, "全局 Prompt")}>全局 Prompt</button>
               <button type="button" className="rounded-md border px-3 py-1 text-xs" onClick={() => void openSystemPrompt(SYSTEM_FILE_PATHS.global.agent, "全局 Agent")}>全局 Agent</button>
@@ -908,13 +1142,13 @@ export function JsonFormView({ path }: { path: string }) {
               </div>
               <div className="mt-3 border-t pt-3">
                 <p className="text-sm font-medium">新手引导</p>
-                <p className="mt-1 text-xs text-zinc-500">如果是第一次使用，建议先看 3 步引导再开始配置与生成。</p>
+                <p className="mt-1 text-xs text-zinc-500">引导已统一在右侧 5 步流程面板中，可随时展开查看并一键执行。</p>
                 <button
                   type="button"
                   className="mt-2 rounded-md border px-3 py-1 text-xs"
-                  onClick={() => window.dispatchEvent(new Event("curator:open-onboarding"))}
+                  onClick={() => window.dispatchEvent(new Event("curator:focus-guide"))}
                 >
-                  重新打开新手引导
+                  定位右侧引导
                 </button>
               </div>
             </div>
@@ -1043,12 +1277,172 @@ export function JsonFormView({ path }: { path: string }) {
   }
 
   if (isResume) {
+    if (isResumeEmpty && !showEmptyResumeForm) {
+      return (
+        <div className="flex h-full items-center justify-center p-6">
+          <div className="w-full max-w-xl rounded-xl border p-6 text-center">
+            <h3 className="text-lg font-semibold">创建你的主简历</h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              推荐先导入已完成的 PDF 简历，系统会自动提取并填充主简历 JSON，你只需微调。
+            </p>
+
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                className="rounded-md border bg-zinc-900 px-5 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
+                disabled={resumeImporting}
+                onClick={() => resumePdfInputRef.current?.click()}
+              >
+                {resumeImporting ? "正在导入 PDF..." : "导入 PDF 简历"}
+              </button>
+              <button
+                type="button"
+                className="text-sm text-zinc-500 underline underline-offset-4"
+                disabled={resumeImporting}
+                onClick={() => setShowEmptyResumeForm(true)}
+              >
+                从零开始填写
+              </button>
+            </div>
+
+            <input
+              ref={resumePdfInputRef}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void importResumeFromPdf(file);
+              }}
+            />
+
+            {resumeImporting && resumeImportStep ? (
+              <div className="mt-4 rounded-md border bg-zinc-50 p-3 text-left text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                <p>{resumeImportStep}</p>
+                <div className="mt-2 flex gap-2">
+                  {[1, 2, 3].map((step) => (
+                    <span
+                      key={step}
+                      className={`h-2 w-2 rounded-full ${resumeImportProgress >= step ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {resumeImportMessage ? (
+              <p
+                className={`mt-3 text-xs ${
+                  resumeImportMessage.type === "success"
+                    ? "text-emerald-600"
+                    : resumeImportMessage.type === "warning"
+                      ? "text-amber-600"
+                      : "text-red-600"
+                }`}
+              >
+                {resumeImportMessage.text}
+              </p>
+            ) : null}
+            {resumeImportMessage?.type === "warning" ? (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-xs"
+                  onClick={() => setShowEmptyResumeForm(true)}
+                >
+                  继续手动填写主简历
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="h-full overflow-auto">
         <SaveBar title="主简历" isDirty={isDirty} status={saveStatus} lastSavedAt={lastSavedAt} onSave={() => persistResume(resumeRef.current)} />
 
         <div className="space-y-4 p-4">
           <h3 className="text-sm font-semibold">主简历表单</h3>
+          <div className="rounded-md border bg-zinc-50 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+            当前简历来源：
+            {resumeSourceStatus === "ready" ? " 已导入PDF（优先）" : null}
+            {resumeSourceStatus === "pdf-fallback-json" ? " 已导入PDF（提取缺失，当前回退主简历JSON）" : null}
+            {resumeSourceStatus === "pdf-only" ? " 已导入PDF（待提取，建议补充主简历JSON）" : null}
+            {resumeSourceStatus === "json-only" ? " 仅主简历JSON" : null}
+            {resumeSourceStatus === "missing" ? " 未配置简历（请先导入PDF或填写主简历）" : null}
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1 text-xs"
+                disabled={resumeImporting}
+                onClick={() => resumePdfInputRef.current?.click()}
+              >
+                {resumeImporting ? "正在导入 PDF..." : "重新导入 PDF"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-red-300 px-3 py-1 text-xs text-red-600"
+                disabled={resumeImporting}
+                onClick={() => void removeImportedResumePdf()}
+              >
+                删除个人简历 PDF
+              </button>
+              <span className="text-xs text-zinc-500">当前版本仅支持可复制文字的 PDF，扫描件/OCR 暂不支持。</span>
+            </div>
+            <input
+              ref={resumePdfInputRef}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                void importResumeFromPdf(file);
+              }}
+            />
+            {resumeImportMessage ? (
+              <p
+                className={`mt-2 text-xs ${
+                  resumeImportMessage.type === "success"
+                    ? "text-emerald-600"
+                    : resumeImportMessage.type === "warning"
+                      ? "text-amber-600"
+                      : "text-red-600"
+                }`}
+              >
+                {resumeImportMessage.text}
+              </p>
+            ) : null}
+            {resumeImportMessage?.type === "warning" ? (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="rounded border px-2 py-1 text-xs"
+                  onClick={() => setShowEmptyResumeForm(true)}
+                >
+                  继续手动填写主简历
+                </button>
+              </div>
+            ) : null}
+            {resumeImporting && resumeImportStep ? (
+              <div className="mt-2 rounded-md border bg-zinc-50 p-2 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                <p>{resumeImportStep}</p>
+                <div className="mt-2 flex gap-2">
+                  {[1, 2, 3].map((step) => (
+                    <span
+                      key={step}
+                      className={`h-2 w-2 rounded-full ${resumeImportProgress >= step ? "bg-blue-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <div className="grid grid-cols-2 gap-3 rounded-md border p-3">
             <input className="rounded-md border p-2 text-sm" placeholder="姓名" value={resume.profile.name} onChange={(e) => saveResumeToState({ ...resume, profile: { ...resume.profile, name: e.target.value } })} />

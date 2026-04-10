@@ -2,6 +2,10 @@ import { readFile } from "@/lib/file-system";
 import { SYSTEM_FILE_PATHS } from "@/lib/system-files";
 import { BuiltContext, ContextMode } from "@/types";
 
+const MAIN_RESUME_PATH = "/简历/主简历.json";
+const IMPORTED_RESUME_PDF_PATH = "/简历/个人简历.pdf";
+const IMPORTED_RESUME_TEXT_PATH = "/简历/个人简历.提取.md";
+
 function makeUserBlock(title: string, content: string) {
   return `## ${title}\n\n${content || "(空)"}`;
 }
@@ -11,6 +15,74 @@ async function readSystemContent(primaryPath: string, legacyPath?: string) {
   if (current?.content) return current.content;
   if (!legacyPath) return "";
   return (await readFile(legacyPath))?.content ?? "";
+}
+
+async function buildResumeBlocks(jobMetaContent?: string) {
+  let resumePath = MAIN_RESUME_PATH;
+  if (jobMetaContent) {
+    try {
+      const parsed = JSON.parse(jobMetaContent) as { resumeId?: string };
+      if (typeof parsed.resumeId === "string" && parsed.resumeId.trim()) {
+        resumePath = parsed.resumeId.trim();
+      }
+    } catch {
+      // fallback to main resume
+    }
+  }
+
+  let resumeFile = await readFile(resumePath);
+  if (!resumeFile && resumePath !== MAIN_RESUME_PATH) {
+    resumeFile = await readFile(MAIN_RESUME_PATH);
+  }
+
+  const importedResumeText = await readFile(IMPORTED_RESUME_TEXT_PATH);
+  const importedResumePdf = await readFile(IMPORTED_RESUME_PDF_PATH);
+  return {
+    resumePath,
+    resumeFile,
+    importedResumeText,
+    importedResumePdf,
+  };
+}
+
+export async function hasAnyResumeSource(jobFolderPath?: string) {
+  const importedExtract = await readFile(IMPORTED_RESUME_TEXT_PATH);
+  if (importedExtract?.content.trim()) return true;
+
+  if (jobFolderPath) {
+    const metaFile = await readFile(`${jobFolderPath}/meta.json`);
+    const { resumeFile } = await buildResumeBlocks(metaFile?.content);
+    if (resumeFile?.content.trim()) return true;
+  }
+
+  const mainResume = await readFile(MAIN_RESUME_PATH);
+  return Boolean(mainResume?.content.trim());
+}
+
+export async function getResumeSourceReceipt(jobFolderPath?: string) {
+  const metaFile = jobFolderPath ? await readFile(`${jobFolderPath}/meta.json`) : undefined;
+  const { resumePath, resumeFile, importedResumeText, importedResumePdf } = await buildResumeBlocks(metaFile?.content);
+
+  const hasStructuredResume = Boolean(resumeFile?.content.trim());
+  const hasImportedExtract = Boolean(importedResumeText?.content.trim());
+  const hasImportedPdf = Boolean(importedResumePdf?.content.trim());
+
+  if (hasImportedExtract && hasStructuredResume) {
+    return "导入简历提取文本（优先）+ 主简历JSON";
+  }
+  if (hasImportedExtract) {
+    return "导入简历提取文本（优先）";
+  }
+  if (hasImportedPdf && hasStructuredResume) {
+    return "导入PDF已保存，当前回退主简历JSON";
+  }
+  if (hasStructuredResume) {
+    return resumePath === MAIN_RESUME_PATH ? "主简历JSON" : `绑定简历JSON（${resumePath}）`;
+  }
+  if (hasImportedPdf) {
+    return "导入PDF已保存，但未提取到可用文本";
+  }
+  return "未检测到简历来源";
 }
 
 export async function buildContext(args: {
@@ -36,7 +108,7 @@ export async function buildContext(args: {
     if (current) {
       messages.push({
         role: "user",
-        content: makeUserBlock(`当前文件: ${current.path}`, current.content),
+        content: makeUserBlock(`当前文件（${current.path}）`, current.content),
       });
     }
   }
@@ -46,30 +118,23 @@ export async function buildContext(args: {
     const meta = await readFile(`${args.jobFolderPath}/meta.json`);
     const jobPrompt = await readSystemContent(SYSTEM_FILE_PATHS.job.prompt, SYSTEM_FILE_PATHS.job.legacyPrompt);
     const jobAgent = await readSystemContent(SYSTEM_FILE_PATHS.job.agent, SYSTEM_FILE_PATHS.job.legacyAgent);
+
     if (jobPrompt) messages.push({ role: "user", content: makeUserBlock("岗位模块指令", jobPrompt) });
     if (jobAgent) messages.push({ role: "user", content: makeUserBlock("岗位模块执行策略", jobAgent) });
-    if (jd) messages.push({ role: "user", content: makeUserBlock("JD原文", jd.content) });
+    if (jd) messages.push({ role: "user", content: makeUserBlock("JD 原文", jd.content) });
     if (meta) messages.push({ role: "user", content: makeUserBlock("岗位元信息", meta.content) });
 
-    let resumePath = "/简历/主简历.json";
-    if (meta) {
-      try {
-        const parsed = JSON.parse(meta.content) as { resumeId?: string };
-        if (typeof parsed.resumeId === "string" && parsed.resumeId.trim()) {
-          resumePath = parsed.resumeId.trim();
-        }
-      } catch {
-        // ignore parse error and keep fallback path
-      }
-    }
-    let resumeFile = await readFile(resumePath);
-    if (!resumeFile && resumePath !== "/简历/主简历.json") {
-      resumeFile = await readFile("/简历/主简历.json");
-    }
+    const { resumePath, resumeFile, importedResumeText } = await buildResumeBlocks(meta?.content);
     if (resumeFile) {
       messages.push({
         role: "user",
-        content: makeUserBlock(`绑定简历: ${resumeFile.path}`, resumeFile.content),
+        content: makeUserBlock(`结构化简历（${resumeFile.path || resumePath}）`, resumeFile.content),
+      });
+    }
+    if (importedResumeText?.content) {
+      messages.push({
+        role: "user",
+        content: makeUserBlock(`导入简历提取文本（${IMPORTED_RESUME_TEXT_PATH}）`, importedResumeText.content),
       });
     }
   }
@@ -91,13 +156,14 @@ export async function buildContext(args: {
       const interviewText = await readFile(`${args.interviewFolderPath}/面试原文.md`);
       if (interviewText) messages.push({ role: "user", content: makeUserBlock("面试原文", interviewText.content) });
     }
+    messages.push({ role: "user", content: makeUserBlock("记忆摘要", memory) });
   }
 
   if (args.mode === "resume-polish") {
     const resumePrompt = await readSystemContent(SYSTEM_FILE_PATHS.resume.prompt, SYSTEM_FILE_PATHS.resume.legacyPrompt);
     const resumeAgent = await readSystemContent(SYSTEM_FILE_PATHS.resume.agent, SYSTEM_FILE_PATHS.resume.legacyAgent);
-    if (resumePrompt) messages.push({ role: "user", content: makeUserBlock("简历润色规则", resumePrompt) });
-    if (resumeAgent) messages.push({ role: "user", content: makeUserBlock("简历执行策略", resumeAgent) });
+    if (resumePrompt) messages.push({ role: "user", content: makeUserBlock("简历模块指令", resumePrompt) });
+    if (resumeAgent) messages.push({ role: "user", content: makeUserBlock("简历模块执行策略", resumeAgent) });
   }
 
   if (args.userPrompt) {

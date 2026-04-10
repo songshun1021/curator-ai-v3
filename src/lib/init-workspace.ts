@@ -12,6 +12,7 @@ import {
 } from "@/lib/default-prompts";
 import { db } from "@/lib/db";
 import { createFile, deleteFile, readFile } from "@/lib/file-system";
+import { migrateLegacyInterviewFoldersIfNeeded } from "@/lib/interview-migration";
 import { SYSTEM_FILE_PATHS } from "@/lib/system-files";
 
 function emptyResumeJson() {
@@ -239,6 +240,7 @@ export async function initWorkspace(): Promise<void> {
   }
 
   await ensureSystemFilesLayout();
+  await migrateLegacyInterviewFoldersIfNeeded();
 
   const modelConfig = await readFile("/AI配置/模型配置.json");
   if (modelConfig?.isSystem) {

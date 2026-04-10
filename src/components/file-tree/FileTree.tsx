@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { FileTreeNode } from "@/components/file-tree/FileTreeNode";
 import { readFile, upsertFile } from "@/lib/file-system";
+import { getInterviewRoundFolders } from "@/lib/interview-paths";
 import { isHiddenSystemPath } from "@/lib/system-files";
 import { useAppStore } from "@/store/app-store";
 
@@ -11,6 +12,7 @@ const REVEAL_HIGHLIGHT_CLASSES = ["ring-2", "ring-blue-400", "bg-blue-50", "dark
 function shouldShowInTree(path: string, isSystem: boolean) {
   if (isSystem) return false;
   if (isHiddenSystemPath(path)) return false;
+  if (path.endsWith("/meta.json")) return false;
   return true;
 }
 
@@ -22,10 +24,11 @@ export function FileTree() {
   const openFilePath = useAppStore((s) => s.openFilePath);
   const treeWrapRef = useRef<HTMLDivElement>(null);
 
+  const files = Object.values(fileCache);
   const stats = {
-    jobs: Object.values(fileCache).filter((f) => f.type === "folder" && f.parentPath === "/岗位").length,
-    resumes: Object.values(fileCache).filter((f) => f.path.startsWith("/简历/") && f.name.endsWith(".json")).length,
-    interviews: Object.values(fileCache).filter((f) => f.type === "folder" && f.parentPath === "/面试复盘").length,
+    jobs: files.filter((f) => f.type === "folder" && f.parentPath === "/岗位").length,
+    resumes: files.filter((f) => f.path.startsWith("/简历/") && f.name.endsWith(".json")).length,
+    interviews: getInterviewRoundFolders(files).length,
   };
 
   useEffect(() => {
@@ -85,7 +88,7 @@ export function FileTree() {
       </div>
 
       <div className="border-t border-zinc-200 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800">
-        {stats.jobs} 个岗位 · {stats.resumes} 份简历 · {stats.interviews} 次面试
+        {stats.jobs} 个岗位 · {stats.resumes} 份简历 · {stats.interviews} 轮面试
       </div>
     </div>
   );

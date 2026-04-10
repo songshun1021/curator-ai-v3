@@ -1,7 +1,9 @@
-import { sendMessage } from "@/lib/ai-engine";
-import { buildContext } from "@/lib/context-builder";
+﻿import { sendMessage } from "@/lib/ai-engine";
+import { dispatchReviewGenerated } from "@/lib/action-events";
+import { buildContext, getResumeSourceReceipt, hasAnyResumeSource } from "@/lib/context-builder";
 import { db } from "@/lib/db";
 import { createFile, fileExists, readFile, upsertFile } from "@/lib/file-system";
+import { normalizeMarkdownOutput } from "@/lib/markdown-normalize";
 import { useAppStore } from "@/store/app-store";
 import { ResumeData } from "@/types";
 
@@ -13,6 +15,14 @@ function getLlmConfig() {
     throw new Error("请先在 /AI配置/模型配置.json 中完成模型配置。");
   }
   return raw;
+}
+
+async function ensureResumeSourceAvailable(jobFolderPath?: string) {
+  const hasSource = await hasAnyResumeSource(jobFolderPath);
+  if (hasSource) return;
+
+  await useAppStore.getState().openFilePath("/简历/主简历.json");
+  throw new Error("未检测到可用简历来源。请先导入 PDF 简历或填写 /简历/主简历.json。");
 }
 
 function startGeneration(kind: string) {
@@ -75,11 +85,13 @@ async function addSystemNotice(content: string) {
 }
 
 async function saveDraftOnAbort(path: string, contentType: "md" | "json", content: string) {
-  if (!content.trim()) {
+  const nextContent = contentType === "md" ? normalizeMarkdownOutput(content) : content.trim();
+  if (!nextContent) {
     await finishGeneration("done");
     return;
   }
-  await writeFileByPath(path, contentType, content);
+
+  await writeFileByPath(path, contentType, nextContent);
   const store = useAppStore.getState();
   await store.reloadTree();
   await store.openFilePath(path);
@@ -185,7 +197,7 @@ function validateAndNormalizeCustomResume(output: string) {
   try {
     parsed = JSON.parse(output);
   } catch {
-    throw new Error("定制简历生成失败：模型返回内容不是合法 JSON，请点击“重新生成定制简历”。");
+    throw new Error("定制简历生成失败：模型返回内容不是合法 JSON，请重新生成。");
   }
   const normalized = normalizeResumePayload(parsed);
   return JSON.stringify(normalized, null, 2);
@@ -198,18 +210,24 @@ export async function generateJobDoc(jobFolderPath: string, docType: JobDocType)
   }
 
   const config = getLlmConfig();
+  await ensureResumeSourceAvailable(jobFolderPath);
+  const resumeSourceReceipt = await getResumeSourceReceipt(jobFolderPath);
   const kindLabelMap: Record<JobDocType, string> = {
     match: "匹配度分析",
     boss: "BOSS招呼语",
     email: "求职邮件",
     "custom-resume": "定制简历",
   };
+
   const instructionMap: Record<JobDocType, string> = {
-    match: "请输出岗位匹配分析，包含：匹配评分（0-100）、优势、缺口、补强建议。",
-    boss: "请输出 BOSS 招呼语，80-120 字，直接可投递。",
-    email: "请输出求职邮件，300-500 字，结构清晰、可直接发送。",
+    match:
+      "请输出岗位匹配分析，包含：匹配结论、优势证据、短板与补强建议、投递建议。禁止输出代码块包裹，仅返回 Markdown 正文。",
+    boss:
+      "请输出一段可直接投递的 BOSS 招呼语，80-120 字，突出与 JD 的匹配证据。禁止输出代码块包裹，仅返回 Markdown 正文。",
+    email:
+      "请输出可直接发送的求职邮件（含主题与正文），300-500 字。禁止输出代码块包裹，仅返回 Markdown 正文。",
     "custom-resume":
-      "你必须仅输出一个合法 JSON 对象，字段结构与主简历完全一致。禁止输出任何解释文字、标题、前后缀、Markdown 代码块。缺失字段请填空字符串或空数组。",
+      "你必须仅输出一个合法 JSON 对象，字段结构与主简历一致。禁止任何解释、标题、Markdown 包裹。",
   };
 
   const controller = startGeneration(kindLabelMap[docType]);
@@ -243,14 +261,18 @@ export async function generateJobDoc(jobFolderPath: string, docType: JobDocType)
     } else {
       const fileName = `${getJobDocName(docType)}.md`;
       savedPath = `${jobFolderPath}/${fileName}`;
-      await writeFileByPath(savedPath, "md", output);
+      const normalizedMd = normalizeMarkdownOutput(output);
+      if (!normalizedMd) {
+        throw new Error("生成失败：模型返回内容为空，请重试。");
+      }
+      await writeFileByPath(savedPath, "md", normalizedMd);
     }
 
     const store = useAppStore.getState();
     await store.reloadTree();
     await store.openFilePath(savedPath);
-    store.setGenerationNotice(`已保存到：${savedPath}`, savedPath);
-    await addSystemNotice(`已保存到：${savedPath}`);
+    store.setGenerationNotice(`已保存到：${savedPath}（本次已使用：${resumeSourceReceipt}）`, savedPath);
+    await addSystemNotice(`已保存到：${savedPath}（本次已使用：${resumeSourceReceipt}）`);
     await finishGeneration("done");
   } catch (error) {
     if (isAbortError(error)) {
@@ -264,6 +286,7 @@ export async function generateJobDoc(jobFolderPath: string, docType: JobDocType)
       await saveDraftOnAbort(draftPath, docType === "custom-resume" ? "json" : "md", streamed);
       return;
     }
+
     const message = error instanceof Error ? error.message : "生成失败";
     await finishGeneration("error", message);
     window.alert(message);
@@ -272,6 +295,8 @@ export async function generateJobDoc(jobFolderPath: string, docType: JobDocType)
 
 export async function generatePrepPack(jobFolderPath: string) {
   const config = getLlmConfig();
+  await ensureResumeSourceAvailable(jobFolderPath);
+  const resumeSourceReceipt = await getResumeSourceReceipt(jobFolderPath);
   const controller = startGeneration("面试准备包");
   let streamed = "";
 
@@ -279,8 +304,9 @@ export async function generatePrepPack(jobFolderPath: string) {
     const context = await buildContext({
       mode: "prep-pack",
       jobFolderPath,
-      userPrompt: "请按固定结构输出完整面试准备包：高频题、追问点、薄弱点、行动清单。",
+      userPrompt: "请生成面试准备包，包含能力拆解、高频题、追问预测、薄弱点与行动清单。禁止输出代码块包裹，仅返回 Markdown 正文。",
     });
+
     const output = await sendMessage({
       ...config,
       messages: context.messages,
@@ -311,7 +337,12 @@ export async function generatePrepPack(jobFolderPath: string) {
     }
 
     const prepPath = `${folderPath}/准备包.md`;
-    await writeFileByPath(prepPath, "md", output);
+    const normalizedPrep = normalizeMarkdownOutput(output);
+    if (!normalizedPrep) {
+      throw new Error("生成失败：面试准备包内容为空，请重试。");
+    }
+
+    await writeFileByPath(prepPath, "md", normalizedPrep);
     await writeFileByPath(
       `${folderPath}/meta.json`,
       "json",
@@ -328,16 +359,26 @@ export async function generatePrepPack(jobFolderPath: string) {
 
     const knowledge = await sendMessage({
       ...config,
-      messages: [{ role: "user", content: `请从以下面试准备包中提取需要复习的知识点，按 Markdown 列表逐条输出：\n\n${output}` }],
+      messages: [
+        {
+          role: "user",
+          content: `请从以下准备包中提取需要复习的知识点，用简洁 Markdown 列表输出。禁止输出代码块包裹，仅返回 Markdown 正文。\n\n${normalizedPrep}`,
+        },
+      ],
       signal: controller.signal,
     });
-    await writeFileByPath(`${folderPath}/知识清单.md`, "md", knowledge);
+
+    const normalizedKnowledge = normalizeMarkdownOutput(knowledge);
+    if (!normalizedKnowledge) {
+      throw new Error("生成失败：知识清单内容为空，请重试。");
+    }
+    await writeFileByPath(`${folderPath}/知识清单.md`, "md", normalizedKnowledge);
 
     const store = useAppStore.getState();
     await store.reloadTree();
     await store.openFilePath(prepPath);
-    store.setGenerationNotice(`已保存到：${prepPath}`, prepPath);
-    await addSystemNotice(`已保存到：${prepPath}`);
+    store.setGenerationNotice(`已保存到：${prepPath}（本次已使用：${resumeSourceReceipt}）`, prepPath);
+    await addSystemNotice(`已保存到：${prepPath}（本次已使用：${resumeSourceReceipt}）`);
     await finishGeneration("done");
   } catch (error) {
     if (isAbortError(error)) {
@@ -345,6 +386,7 @@ export async function generatePrepPack(jobFolderPath: string) {
       const company = jobMeta?.company ?? "未知公司";
       const position = jobMeta?.position ?? "未知岗位";
       const folderPath = `/面试准备包/${company}-${position}`;
+
       if (streamed.trim() && !(await fileExists(folderPath))) {
         await createFile({
           path: folderPath,
@@ -358,9 +400,11 @@ export async function generatePrepPack(jobFolderPath: string) {
           metadata: "{}",
         });
       }
+
       await saveDraftOnAbort(`${folderPath}/准备包.draft.md`, "md", streamed);
       return;
     }
+
     const message = error instanceof Error ? error.message : "生成失败";
     await finishGeneration("error", message);
     window.alert(message);
@@ -375,16 +419,20 @@ export async function generateInterviewReview(interviewFolderPath: string) {
   try {
     const metaFile = await readFile(`${interviewFolderPath}/meta.json`);
     if (!metaFile) throw new Error("缺少面试 meta.json");
+
     const meta = JSON.parse(metaFile.content) as { jobFolderPath?: string; round?: string; company?: string; position?: string };
     const jobFolderPath = meta.jobFolderPath;
     if (!jobFolderPath) throw new Error("meta.json 缺少 jobFolderPath");
+    await ensureResumeSourceAvailable(jobFolderPath);
+    const resumeSourceReceipt = await getResumeSourceReceipt(jobFolderPath);
 
     const context = await buildContext({
       mode: "interview-review",
       jobFolderPath,
       interviewFolderPath,
-      userPrompt: "请输出完整面试复盘报告，包含问题诊断、改进动作、下次面试前清单。",
+      userPrompt: "请生成结构化面试复盘报告，并给出下一步行动清单。禁止输出代码块包裹，仅返回 Markdown 正文。",
     });
+
     const report = await sendMessage({
       ...config,
       messages: context.messages,
@@ -396,28 +444,46 @@ export async function generateInterviewReview(interviewFolderPath: string) {
     });
 
     const reportPath = `${interviewFolderPath}/复盘报告.md`;
-    await writeFileByPath(reportPath, "md", report);
+    const normalizedReport = normalizeMarkdownOutput(report);
+    if (!normalizedReport) {
+      throw new Error("生成失败：复盘报告内容为空，请重试。");
+    }
+    await writeFileByPath(reportPath, "md", normalizedReport);
 
     const summary = await sendMessage({
       ...config,
       messages: [
         { role: "system", content: "你是信息提取助手。" },
-        { role: "user", content: `请从以下复盘报告中提取【行动项】和【知识盲区】，用简洁 Markdown 列表输出。\n\n${report}` },
+        {
+          role: "user",
+          content: `请从以下复盘报告中提取【行动项】和【知识盲区】，用简洁 Markdown 列表输出。禁止输出代码块包裹，仅返回 Markdown 正文。\n\n${normalizedReport}`,
+        },
       ],
       signal: controller.signal,
+    });
+
+    const normalizedSummary = normalizeMarkdownOutput(summary);
+    if (!normalizedSummary) {
+      throw new Error("生成失败：复盘摘要内容为空，请重试。");
+    }
+
+    dispatchReviewGenerated({
+      interviewFolderPath,
+      jobFolderPath,
+      summary: normalizedSummary,
     });
 
     const memoryFile = await readFile("/AI配置/记忆摘要.md");
     const date = new Date().toISOString().slice(0, 10);
     const sectionTitle = `\n\n---\n\n## ${date} - ${meta.company ?? "未知公司"}-${meta.position ?? "未知岗位"} ${meta.round ?? ""}\n\n`;
-    const merged = `${memoryFile?.content ?? "# 记忆摘要"}${sectionTitle}${summary}`;
+    const merged = `${memoryFile?.content ?? "# 记忆摘要"}${sectionTitle}${normalizedSummary}`;
     await writeFileByPath("/AI配置/记忆摘要.md", "md", merged, { isSystem: true });
 
     const store = useAppStore.getState();
     await store.reloadTree();
     await store.openFilePath(reportPath);
-    store.setGenerationNotice(`已保存到：${reportPath}`, reportPath);
-    await addSystemNotice(`已保存到：${reportPath}`);
+    store.setGenerationNotice(`已保存到：${reportPath}（本次已使用：${resumeSourceReceipt}）`, reportPath);
+    await addSystemNotice(`已保存到：${reportPath}（本次已使用：${resumeSourceReceipt}）`);
 
     const threadId = store.currentThreadId;
     if (threadId) {
@@ -425,17 +491,19 @@ export async function generateInterviewReview(interviewFolderPath: string) {
         id: crypto.randomUUID(),
         threadId,
         role: "system",
-        content: "复盘要点已沉淀到记忆摘要，将在下次面试准备中参考。",
+        content: "复盘要点已写入记忆摘要，会在下次面试准备中自动参考。",
         timestamp: new Date().toISOString(),
       });
       await store.loadMessages(threadId);
     }
+
     await finishGeneration("done");
   } catch (error) {
     if (isAbortError(error)) {
       await saveDraftOnAbort(`${interviewFolderPath}/复盘报告.draft.md`, "md", streamed);
       return;
     }
+
     const message = error instanceof Error ? error.message : "生成失败";
     await finishGeneration("error", message);
     window.alert(message);

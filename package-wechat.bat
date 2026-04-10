@@ -8,12 +8,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-curator.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0package-wechat.ps1"
 if errorlevel 1 (
   echo.
-  echo [ERROR] Start failed. Check messages above.
+  echo [ERROR] Package failed. Check messages above.
   pause
   exit /b 1
 )
+
+echo.
+echo [DONE] Package completed.
+pause
 
 endlocal

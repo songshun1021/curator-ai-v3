@@ -30,7 +30,9 @@ export function EditorArea() {
 
         {!isGenerating && file?.type === "file" && file.contentType === "json" ? <JsonFormView path={file.path} /> : null}
 
-        {!isGenerating && file?.type === "file" && file.contentType === "pdf" ? <PdfPreview /> : null}
+        {!isGenerating && file?.type === "file" && file.contentType === "pdf" ? (
+          <PdfPreview path={file.path} content={file.content} />
+        ) : null}
 
         {!isGenerating && file?.type === "file" && !["md", "json", "pdf"].includes(file.contentType) ? (
           <div className="h-full overflow-auto p-4 prose prose-zinc max-w-none dark:prose-invert">

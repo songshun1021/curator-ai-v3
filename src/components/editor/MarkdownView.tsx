@@ -1,10 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { readFile, updateFile } from "@/lib/file-system";
-import { useAppStore } from "@/store/app-store";
 
 const AUTO_SAVE_DELAY_MS = 800;
 const MARKDOWN_EDIT_MODE_KEY = "curator-editor-md-edit-mode";
@@ -49,7 +48,6 @@ export function MarkdownView({ path }: { path: string }) {
         fileVersionRef.current = nextValue;
         setSaveStatus("saved");
         setLastSavedAt(new Date().toISOString());
-        await useAppStore.getState().reloadTree();
       } catch {
         setSaveStatus("error");
       }
@@ -82,6 +80,7 @@ export function MarkdownView({ path }: { path: string }) {
       setSaveStatus("saved");
       return;
     }
+
     setSaveStatus("dirty");
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
@@ -103,6 +102,7 @@ export function MarkdownView({ path }: { path: string }) {
         void persist(true);
       }
     };
+
     window.addEventListener("beforeunload", flush);
     window.addEventListener("pagehide", flush);
     return () => {
@@ -130,7 +130,7 @@ export function MarkdownView({ path }: { path: string }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-zinc-500">
-        <span>Markdown 渲染视图 · {isEditMode ? statusText : "只读预览"}</span>
+        <span>{isEditMode ? `编辑模式 · ${statusText}` : "阅读模式"}</span>
         <button
           type="button"
           className="rounded border px-2 py-0.5"
@@ -140,7 +140,7 @@ export function MarkdownView({ path }: { path: string }) {
             window.localStorage.setItem(MARKDOWN_EDIT_MODE_KEY, String(next));
           }}
         >
-          {isEditMode ? "返回预览" : "编辑源码"}
+          {isEditMode ? "返回阅读模式" : "切换到编辑模式"}
         </button>
       </div>
 
@@ -153,7 +153,7 @@ export function MarkdownView({ path }: { path: string }) {
           />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-4 prose prose-zinc max-w-none dark:prose-invert">
+        <div className="min-h-0 flex-1 overflow-auto bg-white p-4 prose prose-zinc max-w-none dark:bg-zinc-950 dark:prose-invert">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
         </div>
       )}

@@ -4,6 +4,7 @@ import { FileDown, Sparkles } from "lucide-react";
 import { sendMessage } from "@/lib/ai-engine";
 import { buildContext } from "@/lib/context-builder";
 import { deleteFile, readFile, upsertFile } from "@/lib/file-system";
+import { getInterviewFolderPathFromAnyPath } from "@/lib/interview-paths";
 import { generateInterviewReview, generateJobDoc, generatePrepPack } from "@/lib/generation-actions";
 import { exportResumePdf } from "@/lib/resume-pdf";
 import { flushResumeDraft, getResumeDraftSnapshot } from "@/lib/resume-draft-sync";
@@ -12,13 +13,7 @@ import { useAppStore } from "@/store/app-store";
 
 function getJobFolderPath(path: string) {
   const parts = path.split("/").filter(Boolean);
-  if (parts[0] !== "岗位" || parts.length < 2) return null;
-  return `/${parts[0]}/${parts[1]}`;
-}
-
-function getInterviewFolderPath(path: string) {
-  const parts = path.split("/").filter(Boolean);
-  if (parts[0] !== "面试复盘" || parts.length < 2) return null;
+  if (parts[0] !== "岗位" || parts.length < 2 || parts[1].includes(".")) return null;
   return `/${parts[0]}/${parts[1]}`;
 }
 
@@ -50,7 +45,7 @@ export function Toolbar() {
   }
 
   const jobFolderPath = getJobFolderPath(currentFilePath);
-  const interviewFolderPath = getInterviewFolderPath(currentFilePath);
+  const interviewFolderPath = getInterviewFolderPathFromAnyPath(currentFilePath);
   const isInterviewTranscriptFile = currentFilePath.endsWith("/面试原文.md");
 
   async function polishResume() {
@@ -63,7 +58,7 @@ export function Toolbar() {
 
   async function createInterviewRecordQuickly() {
     if (!jobFolderPath) return;
-    const round = window.prompt("请输入面试轮次（例如：一面/二面/HR面）", "一面");
+    const round = window.prompt("请输入面试轮次（例如：一面 / 二面 / HR面）", "一面");
     if (round === null) return;
     try {
       await createInterviewRecord(jobFolderPath, round);

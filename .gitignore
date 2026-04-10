@@ -3,6 +3,7 @@
 out/
 build/
 coverage/
+release/
 .env
 .env.*
 !.env.example

@@ -32,6 +32,7 @@ function isJobFolder(path: string) {
 function shouldShowInTree(path: string, isSystem: boolean) {
   if (isSystem) return false;
   if (isHiddenSystemPath(path)) return false;
+  if (path.endsWith("/meta.json")) return false;
   return true;
 }
 

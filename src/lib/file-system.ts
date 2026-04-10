@@ -2,10 +2,24 @@
 import { TreeNode, VirtualFile } from "@/types";
 
 const now = () => new Date().toISOString();
+const ROOT_FOLDER_ORDER = ["/简历", "/岗位", "/面试准备包", "/面试复盘", "/AI配置"] as const;
 
 function compareFiles(a: VirtualFile, b: VirtualFile) {
   if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
   return a.name.localeCompare(b.name, "zh-Hans-CN");
+}
+
+function compareRootChildren(a: VirtualFile, b: VirtualFile) {
+  const aIdx = ROOT_FOLDER_ORDER.indexOf(a.path as (typeof ROOT_FOLDER_ORDER)[number]);
+  const bIdx = ROOT_FOLDER_ORDER.indexOf(b.path as (typeof ROOT_FOLDER_ORDER)[number]);
+  const aInOrder = aIdx !== -1;
+  const bInOrder = bIdx !== -1;
+
+  if (aInOrder && bInOrder) return aIdx - bIdx;
+  if (aInOrder) return -1;
+  if (bInOrder) return 1;
+
+  return compareFiles(a, b);
 }
 
 export async function createFile(
@@ -38,7 +52,7 @@ export async function updateFile(
 
 export async function listChildren(parentPath: string): Promise<VirtualFile[]> {
   const children = await db.files.where("parentPath").equals(parentPath).toArray();
-  return children.sort(compareFiles);
+  return children.sort(parentPath === "/" ? compareRootChildren : compareFiles);
 }
 
 export async function listAllDescendants(parentPath: string): Promise<VirtualFile[]> {
