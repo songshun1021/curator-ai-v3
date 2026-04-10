@@ -8,7 +8,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0publish-curator.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0publish-curator.ps1" %*
 if errorlevel 1 (
   echo.
   echo [ERROR] Publish failed. Check messages above.

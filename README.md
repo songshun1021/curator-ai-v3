@@ -35,9 +35,16 @@ chmod +x start-curator.sh
 .\publish-curator.ps1
 ```
 
+小白默认就用上面这条命令即可（会自动生成提交信息）。
+
 可选提交信息：
 ```powershell
 .\publish-curator.ps1 -Message "feat: 本轮功能迭代"
+```
+
+应急模式（仅当构建因本机权限问题反复失败时使用）：
+```powershell
+.\publish-curator.ps1 -SkipBuild
 ```
 
 发布脚本会执行：
@@ -89,12 +96,25 @@ chmod +x start-curator.sh
 ### 模型生成失败
 - 检查 API Key、Base URL、模型名是否匹配
 
-## 项目基线文档（先读）
+## 文档导航
 
-- `Curator-AI-v3-产品规划.md`
-- `Curator-AI-v3-开发执行手册.md`
-- `SESSION_COMPACT.md`
-- `AI开发复盘.md`
+| 文档 | 用途 |
+| --- | --- |
+| `docs/Curator-AI-v3-产品规划.md` | 产品目标、范围与阶段规划 |
+| `docs/Curator-AI-v3-开发执行手册.md` | 技术架构、实施规范与约束 |
+| `docs/AI开发复盘.md` | 迭代沉淀与交接记录 |
+| `docs/BASELINE_ALIGNMENT_MATRIX.md` | 文档与代码基线对齐矩阵 |
+| `docs/QA_REGRESSION_MATRIX.md` | 回归测试矩阵 |
+| `docs/RELEASE_SECURITY_CHECKLIST.md` | 发布前安全检查清单 |
+| `docs/ROADMAP_4W_MULTI_AGENT.md` | 4 周并行迭代路线图 |
+| `SESSION_COMPACT.md` | 最近会话连续性摘要（持续更新） |
+| `AGENTS.md` | Agent 协作与执行规则 |
+
+## 仓库体积说明
+
+- GitHub 仓库体积主要由源码与文档组成。
+- 本地看起来体积很大通常来自 `node_modules/` 与 `.next/` 缓存，这两类目录不会提交到仓库。
+- 微信分享包会自动排除 `.git`、`node_modules`、`.next`、`.env*`，仅保留启动所需内容。
 
 ## 开源说明
 

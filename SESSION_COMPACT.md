@@ -602,3 +602,40 @@
 - macOS/Linux 仅保留启动能力：`start-curator.sh`。
 - 发布与微信打包仅在 Windows 执行：`publish-curator.*`、`package-wechat.*`。
 - 先前“新增 mac 发布/打包脚本”的阶段性记录已废弃，以本条为准。
+
+---
+
+## 本轮补充（2026-04-10，仓库精简保守收敛）
+
+### 本轮已完成事项补充
+1. 根目录文档归档到 `docs/`，迁移：
+   - `Curator-AI-v3-产品规划.md`
+   - `Curator-AI-v3-开发执行手册.md`
+   - `AI开发复盘.md`
+   - `BASELINE_ALIGNMENT_MATRIX.md`
+   - `QA_REGRESSION_MATRIX.md`
+   - `RELEASE_SECURITY_CHECKLIST.md`
+   - `ROADMAP_4W_MULTI_AGENT.md`
+2. 根目录保留入口与核心文件，脚本仍为“根入口 + scripts 逻辑”结构。
+3. `README.md` 新增“文档导航”与“仓库体积说明”，明确本地大体积主要来自 `node_modules/.next`。
+4. 新增 `docs/README.md` 文档索引与 `docs/CHANGELOG-lite.md` 对外精简变更记录。
+5. 保持不改协议与数据层（`/api/chat`、Dexie、`ResumeData` 全部不变）。
+
+### 待验证项补充
+- 推送后需在 GitHub 页面确认根目录可读性提升（入口文件优先展示）。
+- 需在新机器验证：按 README 文档导航可快速定位核心文档。
+
+---
+
+## 本轮补充（2026-04-10，发布脚本小白友好化）
+
+### 本轮已完成事项补充
+1. `publish-curator.bat` 支持参数透传（`%*`），并将错误/成功提示改为中文易读文案。
+2. `publish-curator.ps1` 新增 `-SkipBuild` 参数透传到实际发布逻辑脚本。
+3. `scripts/release/publish-curator.ps1` 重写为中文分步骤输出（1/6 到 6/6），默认自动 commit 信息，无需手动输入。
+4. 发布脚本失败提示强化：依赖缺失、EPERM、rebase 冲突均给出可执行下一步命令。
+5. `README.md` 补充小白发布说明与应急命令（`-SkipBuild`）。
+
+### 待验证项补充
+- 需在你本机通过双击 `publish-curator.bat` 完整走一遍，确认中文提示符合预期。
+- 若使用 `-SkipBuild`，需额外手动确认一次 `pnpm dev` 可正常启动。

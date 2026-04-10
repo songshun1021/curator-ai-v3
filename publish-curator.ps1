@@ -1,5 +1,6 @@
 ﻿param(
-  [string]$Message = ""
+  [string]$Message = "",
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,4 +11,8 @@ if (-not (Test-Path $scriptPath)) {
   exit 1
 }
 
-& $scriptPath -Message $Message
+& $scriptPath -Message $Message -SkipBuild:$SkipBuild
+
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
+}
