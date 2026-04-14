@@ -1,0 +1,2 @@
+export const RESUME_TEXT_MIN_VISIBLE_CHARS = 20;
+export const RESUME_TEXT_OK_VISIBLE_CHARS = 60;
