@@ -1,0 +1,148 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="72" x2="1418" y2="856" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF8"/>
+      <stop offset="0.52" stop-color="#F6F8FC"/>
+      <stop offset="1" stop-color="#EEF2F8"/>
+    </linearGradient>
+    <radialGradient id="glowWarm" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(258 136) rotate(30) scale(420 300)">
+      <stop stop-color="#F7D9B7" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#F7D9B7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCool" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1302 168) rotate(128) scale(420 320)">
+      <stop stop-color="#DDEBFF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#DDEBFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="panelGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1116 286) rotate(115) scale(500 380)">
+      <stop stop-color="#EEF5FF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#EEF5FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="white" stop-opacity="0.88"/>
+      <stop offset="1" stop-color="white" stop-opacity="0.64"/>
+    </linearGradient>
+    <linearGradient id="glassStrong" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="white" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#F6F9FF" stop-opacity="0.78"/>
+    </linearGradient>
+    <linearGradient id="blueChip" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#F5F9FF" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#E8F0FF" stop-opacity="0.82"/>
+    </linearGradient>
+    <filter id="shadowPanel" x="-80" y="-80" width="1760" height="1060" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#97A8C0" flood-opacity="0.18"/>
+    </filter>
+    <filter id="shadowSoft" x="-40" y="-40" width="1680" height="980" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#A2B3CA" flood-opacity="0.14"/>
+    </filter>
+    <filter id="shadowChip" x="-30" y="-30" width="300" height="140" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#8FA7CE" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#glowWarm)"/>
+  <rect width="1600" height="900" fill="url(#glowCool)"/>
+
+  <g filter="url(#shadowPanel)">
+    <rect x="58" y="48" width="1484" height="804" rx="40" fill="url(#glass)" stroke="white" stroke-opacity="0.72" stroke-width="1.2"/>
+  </g>
+
+  <g opacity="0.72">
+    <circle cx="1330" cy="712" r="98" fill="#F7EDE0"/>
+    <circle cx="1388" cy="712" r="76" fill="#EFF5FF"/>
+  </g>
+
+  <g>
+    <text x="112" y="132" fill="#A2A9B5" font-size="20" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif" letter-spacing="0.34em">AI JOB SEARCH WORKSPACE</text>
+    <text x="112" y="228" fill="#1A2233" font-size="74" font-weight="700" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">Curator AI</text>
+    <text x="112" y="290" fill="#5C6576" font-size="26" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">把简历、岗位、准备包和复盘，放进一个连续推进的 AI 求职工作台</text>
+
+    <g filter="url(#shadowChip)">
+      <rect x="112" y="350" width="152" height="56" rx="28" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <circle cx="144" cy="378" r="6" fill="#76A8FF"/>
+      <text x="164" y="386" fill="#2252B6" font-size="22" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">简历</text>
+    </g>
+    <g filter="url(#shadowChip)">
+      <rect x="280" y="350" width="152" height="56" rx="28" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <circle cx="312" cy="378" r="6" fill="#76A8FF"/>
+      <text x="332" y="386" fill="#2252B6" font-size="22" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">岗位</text>
+    </g>
+    <g filter="url(#shadowChip)">
+      <rect x="448" y="350" width="182" height="56" rx="28" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <circle cx="480" cy="378" r="6" fill="#76A8FF"/>
+      <text x="500" y="386" fill="#2252B6" font-size="22" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">准备包</text>
+    </g>
+    <g filter="url(#shadowChip)">
+      <rect x="646" y="350" width="168" height="56" rx="28" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <circle cx="678" cy="378" r="6" fill="#76A8FF"/>
+      <text x="698" y="386" fill="#2252B6" font-size="22" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">复盘</text>
+    </g>
+
+    <text x="112" y="486" fill="#2D3442" font-size="28" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">适合中国大陆高校学生的 AI 求职全链路助手</text>
+    <text x="112" y="538" fill="#667085" font-size="22" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">从 PDF 简历导入开始，串起岗位分析、准备包生成和面试复盘沉淀。</text>
+
+    <g filter="url(#shadowSoft)">
+      <rect x="112" y="610" width="402" height="152" rx="30" fill="url(#glassStrong)" stroke="white" stroke-opacity="0.78"/>
+      <text x="144" y="668" fill="#1D2533" font-size="26" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">开箱即用的 Web 工作台</text>
+      <text x="144" y="714" fill="#667085" font-size="21" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">用户打开网页即可使用，按自己的模型配置继续推进。</text>
+    </g>
+  </g>
+
+  <g transform="translate(850 108)" filter="url(#shadowPanel)">
+    <rect width="620" height="660" rx="38" fill="url(#glassStrong)" stroke="white" stroke-opacity="0.82"/>
+    <rect x="0" y="0" width="620" height="660" rx="38" fill="url(#panelGlow)"/>
+
+    <g filter="url(#shadowSoft)">
+      <rect x="28" y="28" width="168" height="604" rx="30" fill="url(#glass)" stroke="white" stroke-opacity="0.78"/>
+      <text x="50" y="70" fill="#A0A8B5" font-size="14" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif" letter-spacing="0.26em">WORKSPACE</text>
+      <text x="50" y="110" fill="#1F2734" font-size="28" font-weight="700" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">Curator AI</text>
+
+      <rect x="44" y="152" width="136" height="52" rx="24" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <text x="78" y="185" fill="#2756B7" font-size="21" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">导入简历</text>
+
+      <rect x="44" y="218" width="136" height="52" rx="24" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <text x="78" y="251" fill="#2756B7" font-size="21" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">新建岗位</text>
+
+      <rect x="36" y="308" width="152" height="48" rx="20" fill="#EAF2FF" stroke="#CFE0FF"/>
+      <text x="56" y="338" fill="#2152B2" font-size="20" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">简历</text>
+      <rect x="52" y="374" width="120" height="38" rx="16" fill="white" fill-opacity="0.74"/>
+      <text x="68" y="398" fill="#4E5969" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">主简历.json</text>
+      <rect x="52" y="424" width="120" height="38" rx="16" fill="white" fill-opacity="0.68"/>
+      <text x="68" y="448" fill="#4E5969" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">个人简历.md</text>
+
+      <text x="48" y="518" fill="#798292" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">岗位</text>
+      <text x="48" y="552" fill="#798292" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">面试准备包</text>
+      <text x="48" y="586" fill="#798292" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">面试复盘</text>
+    </g>
+
+    <g filter="url(#shadowSoft)">
+      <rect x="220" y="28" width="372" height="428" rx="30" fill="url(#glass)" stroke="white" stroke-opacity="0.78"/>
+      <text x="246" y="68" fill="#657180" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">当前文件</text>
+      <text x="246" y="104" fill="#1F2734" font-size="24" font-weight="700" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">岗位匹配分析</text>
+
+      <rect x="244" y="138" width="324" height="110" rx="24" fill="white" fill-opacity="0.76"/>
+      <text x="268" y="178" fill="#1D2533" font-size="22" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">综合判断</text>
+      <text x="268" y="216" fill="#5B6677" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">快速确认主简历与 JD 的匹配度，</text>
+      <text x="268" y="244" fill="#5B6677" font-size="18" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">并识别优势与缺口。</text>
+
+      <rect x="244" y="270" width="140" height="46" rx="20" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <text x="281" y="299" fill="#2756B7" font-size="20" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">匹配分析</text>
+
+      <rect x="396" y="270" width="152" height="46" rx="20" fill="url(#blueChip)" stroke="#D7E5FF"/>
+      <text x="428" y="299" fill="#2756B7" font-size="20" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">面试准备包</text>
+
+      <rect x="244" y="338" width="324" height="88" rx="22" fill="#F8FBFF" stroke="#E0EBFF"/>
+      <text x="266" y="372" fill="#2152B2" font-size="18" font-weight="600" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">已保存到：/岗位/腾讯-产品策划/匹配度分析.md</text>
+      <text x="266" y="404" fill="#677385" font-size="16" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">本次已使用：个人简历.md（PDF 文本提取）</text>
+    </g>
+
+    <g filter="url(#shadowSoft)">
+      <rect x="220" y="476" width="372" height="156" rx="30" fill="url(#glass)" stroke="white" stroke-opacity="0.78"/>
+      <text x="246" y="518" fill="#A0A8B5" font-size="16" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif" letter-spacing="0.22em">ASSISTANT</text>
+      <text x="246" y="556" fill="#1F2734" font-size="24" font-weight="700" font-family="'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif">AI 助手</text>
+      <rect x="244" y="580" width="250" height="22" rx="11" fill="#EEF4FF"/>
+      <rect x="244" y="614" width="296" height="22" rx="11" fill="#F5F7FB"/>
+    </g>
+  </g>
+</svg>
